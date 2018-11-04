@@ -11,14 +11,42 @@ const assert = require('assert');
 // You can import and use all API from the 'vscode' module
 // as well as import your extension to test it
 // const vscode = require('vscode');
-// const myExtension = require('../extension');
+const uckw = require('../uppercase-keywords');
 
 // Defines a Mocha test suite to group tests of similar kind together
-suite("Extension Tests", function() {
-
+suite('Extension Tests', function() {
     // Defines a Mocha unit test
-    test("Something 1", function() {
-        assert.equal(-1, [1, 2, 3].indexOf(5));
-        assert.equal(-1, [1, 2, 3].indexOf(0));
+    test('basic query', () => {
+        assert.equal(uckw(`select * from test;`), `SELECT * FROM test;`);
+    });
+      
+    test('ignores keywords in strings', () => {
+        assert.equal(
+            uckw(`select one, 'select in a string, a distinct case' from test;`), 
+            `SELECT one, 'select in a string, a distinct case' FROM test;`
+        );
+    });
+      
+    test('advanced select', () => {
+        const before = `
+            select one, two, count(three)
+            from \`table\` as t1
+            inner join table2 as t2 on t1.id = t2.foreign_key
+            where t1.some_field <> 'something'
+            group by t2.name
+            order by t1.name
+            limit 20
+        `;
+        const after = `
+            SELECT one, two, count(three)
+            FROM \`table\` AS t1
+            INNER JOIN table2 AS t2 ON t1.id = t2.foreign_key
+            WHERE t1.some_field <> 'something'
+            GROUP BY t2.name
+            ORDER BY t1.name
+            LIMIT 20
+        `;
+        assert.equal(uckw(before), after);
     });
 });
+
