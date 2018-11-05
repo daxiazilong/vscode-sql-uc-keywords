@@ -29,7 +29,7 @@ suite('Extension Tests', function() {
       
     test('advanced select', () => {
         const before = `
-            select one, two, count(three)
+            select one, two, count(three), "distinct"
             from \`table\` as t1
             inner join table2 as t2 on t1.id = t2.foreign_key
             where t1.some_field <> 'something'
@@ -38,7 +38,7 @@ suite('Extension Tests', function() {
             limit 20
         `;
         const after = `
-            SELECT one, two, count(three)
+            SELECT one, two, count(three), "distinct"
             FROM \`table\` AS t1
             INNER JOIN table2 AS t2 ON t1.id = t2.foreign_key
             WHERE t1.some_field <> 'something'
@@ -48,5 +48,34 @@ suite('Extension Tests', function() {
         `;
         assert.equal(uckw(before), after);
     });
+
+    test('ignores comments', () => {
+        assert.equal(
+            uckw('/* select something */ drop table foo;'),
+            '/* select something */ DROP TABLE foo;'
+        );
+
+        assert.equal(uckw(`
+                select *
+                from my_table -- between comment
+                order by id
+            `), `
+                SELECT *
+                FROM my_table -- between comment
+                ORDER BY id
+            `
+        );
+
+        assert.equal(uckw(`
+                select *
+                from my_table # on the way down
+                order by id
+            `), `
+                SELECT *
+                FROM my_table # on the way down
+                ORDER BY id
+            `
+        );
+    })
 });
 

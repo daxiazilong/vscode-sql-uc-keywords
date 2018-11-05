@@ -1,47 +1,68 @@
 const reserved = require('./reserved-words');
 const reservedPattern = new RegExp(`\\b(?:${reserved.join('|')})\\b`, 'ig');
 
-function getMatch(s, pattern) {
-  let match = s.match(pattern);
-  return match ? match[0] : false;
-}
-
-function getNormalMatch(s) {
-  return getMatch(s, /^[^'"`]*/);
-}
-
-function getStringMatch(s) {
-  let quote = getMatch(s, /^['"`]/)
-  if(quote) {
-    const stringPattern = new RegExp(`^${quote}(?:[^${quote}\\\\]|\\\\.)*(${quote}|$)`);
-    return getMatch(s, stringPattern)
+const matcherFactory = (pattern, doTransform = false, parseMatch = m => m[0]) => {
+  return (sql) => {
+    let match = sql.match(pattern);
+    return match ? {text: parseMatch(match), doTransform} : null;
   }
 }
 
-function replace(s) {
+const matchNormal = matcherFactory(/^([\s\S]*?)(?:$|'|"|`|--|#|\/\*)/, true, m => m[1]);
+const matchSingleString = matcherFactory(/^'(?:[^'\\]|\\.)*('|$)/);
+const matchDoubleString = matcherFactory(/^"(?:[^"\\]|\\.)*("|$)/);
+const matchBacktickString = matcherFactory(/^`(?:[^`\\]|\\.)*(`|$)/);
+const matchHashComment = matcherFactory(/^#.*($|\n)/);
+const matchDashComment = matcherFactory(/^--.*($|\n)/);
+const matchblockComment = matcherFactory(/^\/\*[\s\S]*?($|\*\/)/);
+
+const matchers = [
+  matchSingleString, matchDoubleString, matchBacktickString,
+  matchDashComment, matchHashComment, matchblockComment,
+  matchNormal
+];
+
+// function getMatch(s, pattern) {
+//   let match = s.match(pattern);
+//   return match ? match[0] : false;
+// }
+
+// function getNormalMatch(s) {
+//   return getMatch(s, /^[^'"`]*/);
+// }
+
+// function getStringMatch(s) {
+//   let quote = getMatch(s, /^['"`]/)
+//   if(quote) {
+//     const stringPattern = new RegExp(`^${quote}(?:[^${quote}\\\\]|\\\\.)*(${quote}|$)`);
+//     return getMatch(s, stringPattern)
+//   }
+// }
+
+function transform(s) {
   return s.replace(reservedPattern, (match) => {
     return match.toUpperCase();
   });
 }
 
 function upperCaseKeywords(sql) {
-  let result = '', match;
+  let blocks = [], block;
 
   while(sql) {
-    match = getNormalMatch(sql);
-    if(match) {
-      result += replace(match)
-      sql = sql.slice(match.length);
-    }
-
-    match = getStringMatch(sql);
-    if(match) {
-      result += match;
-      sql = sql.slice(match.length);
+    for (let matcher of matchers) {
+      if(block = matcher(sql)) {
+        blocks.push(block);
+        sql = sql.slice(block.text.length);
+        break;
+      }
     }
   }
 
-  return result;
+  return blocks.reduce((sql, block) => {
+    let {text, doTransform} = block
+    if(doTransform) text = transform(text);
+    return sql + text;
+  }, '');
 }
 
 module.exports = upperCaseKeywords;
